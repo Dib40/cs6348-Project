@@ -103,8 +103,8 @@ try:
     users = json.load(userfile)
 except:
     users = {}
-uname = input("Username: ")
-pwd = getpass()
+uname = "symmetric"
+pwd = "encryption"
 if not uname in users.keys():
     response = input("This user does not exist. Would you like to create a new user with this name? (Y/N): ")
     # In the case of a new user, we have to generate both salts
