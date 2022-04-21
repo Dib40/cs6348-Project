@@ -1,4 +1,16 @@
 import wx
+import subprocess
+import searchencrypt
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+import os
+import sys
+import json
+from getpass import getpass
+from base64 import b64encode, b64decode
+import mysql.connector
+
 ########################################################################
 class LoginDialog(wx.Dialog):
     """
@@ -42,14 +54,16 @@ class LoginDialog(wx.Dialog):
         """
         Check credentials and login
         """
-        stupid_password = "pa$$w0rd!"
+        username= "symmetric"
+        password = "encryption"
+        user = self.user.GetValue()
         user_password = self.password.GetValue()
-        if user_password == stupid_password:
-            print "You are now logged in!"
+        if user_password == password and user==username:
+            print ("You are now logged in!")
             self.logged_in = True
             self.Close()
         else:
-            print "Username or password is incorrect!"
+            print ("Username or password is incorrect!")
             
 ########################################################################
 class MyPanel(wx.Panel):
@@ -68,7 +82,7 @@ class MainFrame(wx.Frame):
     #----------------------------------------------------------------------
     def __init__(self):
         """Constructor"""
-        wx.Frame.__init__(self, None, title="Main App")
+        wx.Frame.__init__(self, None, title="Searchable Symmetric Encryption")
         panel = MyPanel(self)
 
    #################################
@@ -77,8 +91,9 @@ class MainFrame(wx.Frame):
         
         k_lbl = wx.StaticText(self, label="Keyword:")
         k_sizer.Add(k_lbl, 0, wx.ALL|wx.CENTER, 5)
-        self.keyword = wx.TextCtrl(self, style=wx.TE_PASSWORD|wx.TE_PROCESS_ENTER)
-        self.keyword.Bind(wx.EVT_TEXT_ENTER, self.search)
+        #self.keyword = wx.TextCtrl(self, style=wx.TE_PASSWORD|wx.TE_PROCESS_ENTER)
+        #self.keyword.Bind(wx.EVT_TEXT_ENTER, self.search)
+        self.keyword = wx.TextCtrl(self)
         k_sizer.Add(self.keyword, 0, wx.ALL, 5)
         
         main_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -104,7 +119,18 @@ class MainFrame(wx.Frame):
         self.Show()
 
     def search(self,event):    
-        pass
+        keyword = self.keyword.GetValue()
+        db = searchencrypt.connectToDB('cloudstorage.cwyqmpoiw0xl.us-east-1.rds.amazonaws.com', 'symmetric', 'encryption', 'world')
+        res=searchencrypt.search_by_blindindex(db, keyword, searchencrypt.idxkey)
+        print(res)
+
+        ##output to GUI
+
+        #wx.MessageBox("hi" , res)
+        wx.MessageBox("%s" %res, "search result")
+        
+
+        
         
 if __name__ == "__main__":
     app = wx.App(False)
