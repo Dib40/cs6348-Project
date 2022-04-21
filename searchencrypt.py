@@ -1,4 +1,4 @@
-import xlsxwriter as xlsxwriter
+import pandas as pd
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
@@ -88,15 +88,18 @@ def getBlindIndex(indexKey, plaintext):
 
 
 # This is a placeholder. We'll decide what database and what column to encrypt later
-def findHumansBySSN(db, plaintext, indexKey):
-    index = getBlindIndex(indexKey, plaintext)
-    cursor = db.cursor()
-    cursor.execute("SELECT * FROM humans WHERE ssn_bidx = " + index)
+def search_by_blindindex(db, plaintext, indexKey):
+    index = b64encode(getBlindIndex(indexKey, plaintext.encode('UTF-8'))).decode('UTF-8')
+    cursor = db.cursor(dictionary=True)
+    query = "SELECT Name, SurfaceArea,IndepYear,Population,Continent ,Region, LifeExpectancy,GNP,GNPOld,HeadOfState, Capital FROM country WHERE code_idx=\"{cidx}\"".format(cidx = index)
+    cursor.execute(query)
     result = cursor.fetchall()
-    return result
+    #print(result)
+    df = pd.read_sql_query(query, con = db)
+    #print(df)
+    return df
 
 
-# Our users file is loaded as a dictionary where the keys are the usernames and the values are tuples containing (in order) the encryption salt and index salt
 userfile = open('users.json', 'r+')
 # This is just in the case that the file exists but is empty
 try:
@@ -127,34 +130,3 @@ idxkey = deriveKey(pwd.encode('UTF-8'), b64decode(idxsalt.encode('UTF-8')))
 db = connectToDB('cloudstorage.cwyqmpoiw0xl.us-east-1.rds.amazonaws.com', 'symmetric', 'encryption', 'world')
 cursor = db.cursor(dictionary=True)
 cursor.execute("SELECT code FROM country")
-
-import xlsxwriter
-
-workbook = xlsxwriter.Workbook('values.xlsx')
-
-r = 0
-worksheet = workbook.add_worksheet()
-worksheet.write(r, 0, "Plaintext")
-worksheet.write(r, 1, "Ciphertext")
-worksheet.write(r, 2, "Blind Index")
-worksheet.write(r, 3, "IV")
-worksheet.write(r, 4, "Tag")
-
-for row in cursor:
-    r = r+1
-    print("plaintext", row["code"])
-    worksheet.write(r, 0, row["code"])
-    plaintext = row["code"].encode('UTF-8')
-    # We're gonna need to append the IV to the end of the record, or give it it's own column. Same with the tag.
-    iv, ciphertext, tag = encrypt(enckey, plaintext, uname.encode('UTF-8'))
-    print("ciphertext", b64encode(ciphertext).decode('UTF-8'))
-    worksheet.write(r, 1, b64encode(ciphertext).decode('UTF-8'))
-    blindindex = getBlindIndex(idxkey, plaintext)
-    print("blindindex", b64encode(blindindex).decode('UTF-8'))
-    worksheet.write(r, 2, b64encode(blindindex).decode('UTF-8'))
-    print("IV ", b64encode(iv).decode('UTF-8'))
-    worksheet.write(r, 3, b64encode(iv).decode('UTF-8'))
-    print("tag", b64encode(tag).decode('UTF-8'))
-    worksheet.write(r, 4, b64encode(tag).decode('UTF-8'))
-
-workbook.close()
