@@ -56,14 +56,33 @@ class LoginDialog(wx.Dialog):
         """
         username= "symmetric"
         password = "encryption"
-        user = self.user.GetValue()
+        self.user = self.user.GetValue()
         user_password = self.password.GetValue()
-        if user_password == password and user==username:
-            print ("You are now logged in!")
-            self.logged_in = True
-            self.Close()
-        else:
-            print ("Username or password is incorrect!")
+        # if user_password == password and self.user==username:
+        print ("You are now logged in!")
+        self.logged_in = True
+        self.Close()
+        userfile = open('users.json', 'r')
+        try:
+            users = json.load(userfile)
+        except:
+            users = {}
+        userfile.close()
+        if not self.user in users.keys():
+            print("This user does not exist. Creating new user.")
+            # In the case of a new user, we have to generate both salts
+            encsalt = os.urandom(16)
+            idxsalt = os.urandom(16)
+            users[self.user] = (b64encode(encsalt).decode('UTF-8'), b64encode(idxsalt).decode('UTF-8'))
+            userfile = open('users.json', 'w')
+            json.dump(users, userfile, indent=6)
+            userfile.close()
+        encsalt = users[self.user][0]
+        idxsalt = users[self.user][1]
+        self.enckey = searchencrypt.deriveKey(user_password.encode('UTF-8'), b64decode(encsalt.encode('UTF-8')))
+        self.idxkey = searchencrypt.deriveKey(user_password.encode('UTF-8'), b64decode(idxsalt.encode('UTF-8')))
+        # else:
+        #     print ("Username or password is incorrect!")
             
 ########################################################################
 class MyPanel(wx.Panel):
@@ -82,7 +101,7 @@ class MainFrame(wx.Frame):
     #----------------------------------------------------------------------
     def __init__(self):
         """Constructor"""
-        wx.Frame.__init__(self, None, title="Searchable Symmetric Encryption")
+        wx.Frame.__init__(self, None, title="Blind Indexing Search")
         panel = MyPanel(self)
 
    #################################
@@ -110,18 +129,22 @@ class MainFrame(wx.Frame):
 
         
         # Ask user to login
-        dlg = LoginDialog()
-        dlg.ShowModal()
-        authenticated = dlg.logged_in
+        self.dlg = LoginDialog()
+        self.dlg.ShowModal()
+        authenticated = self.dlg.logged_in
         if not authenticated:
             self.Close()
         
         self.Show()
 
-    def search(self,event):    
+    def search(self, event,):
         keyword = self.keyword.GetValue()
         db = searchencrypt.connectToDB('cloudstorage.cwyqmpoiw0xl.us-east-1.rds.amazonaws.com', 'symmetric', 'encryption', 'world')
-        res=searchencrypt.search_by_blindindex(db, keyword, searchencrypt.idxkey)
+        try:
+            res=searchencrypt.search_by_blindindex(db, keyword, self.dlg.idxkey, self.dlg.enckey, self.dlg.user)
+        except:
+            print("No records found.")
+            return
         print(res)
 
         ##output to GUI

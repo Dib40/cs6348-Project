@@ -14,8 +14,8 @@ from xlwt import Workbook
 def connectToDB(hostname, uname, pwd, dbase):
     db = mysql.connector.connect(
         host=hostname,
-        user=uname,
-        password=pwd,
+        user='symmetric',
+        password='encryption',
         database=dbase
     )
     return db
@@ -88,45 +88,53 @@ def getBlindIndex(indexKey, plaintext):
 
 
 # This is a placeholder. We'll decide what database and what column to encrypt later
-def search_by_blindindex(db, plaintext, indexKey):
+def search_by_blindindex(db, plaintext, indexKey, enckey, uname):
     index = b64encode(getBlindIndex(indexKey, plaintext.encode('UTF-8'))).decode('UTF-8')
     cursor = db.cursor(dictionary=True)
-    query = "SELECT Name, SurfaceArea,IndepYear,Population,Continent ,Region, LifeExpectancy,GNP,GNPOld,HeadOfState, Capital FROM country WHERE code_idx=\"{cidx}\"".format(cidx = index)
+    query = "SELECT code_iv, code_enc, code_tag FROM country WHERE code_idx=\"{cidx}\"".format(cidx = index)
     cursor.execute(query)
     result = cursor.fetchall()
     #print(result)
+
     df = pd.read_sql_query(query, con = db)
-    #print(df)
-    return df
+    code_iv = df.loc[0:, 'code_iv'].to_string().split(' ')[4]
+    code_enc = df.loc[0:, 'code_enc'].to_string().split(' ')[4]
+    code_tag = df.loc[0:, 'code_tag'].to_string().split(' ')[4]
+    try:
+        plaintext = decrypt(enckey, uname.encode('UTF-8'), b64decode(code_iv.encode('UTF-8')), b64decode(code_enc.encode('UTF-8')), b64decode(code_tag.encode('UTF-8')))
+    except:
+        return "An error has occurred"
 
 
-userfile = open('users.json', 'r+')
+    print(plaintext)
+    return "Encrypted: " + code_enc + ", Decrypted: " + plaintext.decode('UTF-8')
+
+# Test
+def testdecrypt(db):
+    cursortest = db.cursor(dictionary=True, buffered=True)
+    querytest = "SELECT code_iv, code_enc, code_tag FROM country WHERE Code = 'ABW';"
+    cursortest.execute(querytest)
+    resulttest = cursortest.fetchall()
+    dftest = pd.read_sql_query(querytest, con=db)
+    code_ivtest = dftest.loc[0:, 'code_iv'].to_string().split(' ')[4]
+    code_enctest = dftest.loc[0:, 'code_enc'].to_string().split(' ')[4]
+    code_tagtest = dftest.loc[0:, 'code_tag'].to_string().split(' ')[4]
+    keytest = deriveKey(b"hello", os.urandom(12))
+    unametest = "hello"
+    try:
+        plaintext = decrypt(keytest, unametest.encode('UTF-8'), b64decode(code_ivtest.encode('UTF-8')), b64decode(code_enctest.encode('UTF-8')), b64decode(code_tagtest.encode('UTF-8')))
+        print(plaintext)
+    except:
+        print("An error has occurred")
+
 # This is just in the case that the file exists but is empty
-try:
-    users = json.load(userfile)
-except:
-    users = {}
+
 uname = "symmetric"
 pwd = "encryption"
-if not uname in users.keys():
-    response = input("This user does not exist. Would you like to create a new user with this name? (Y/N): ")
-    # In the case of a new user, we have to generate both salts
-    if response.lower() == 'y':
-        encsalt = os.urandom(16)
-        idxsalt = os.urandom(16)
-        users[uname] = (b64encode(encsalt).decode('UTF-8'), b64encode(idxsalt).decode('UTF-8'))
-        json.dump(users, userfile, indent=6)
-    else:
-        print("Exiting...")
-        sys.exit()
-userfile.close()
 
-encsalt = users[uname][0]
-idxsalt = users[uname][1]
+
+
 # We're running the key derviation twice - once to generate an encryption key and once to generate a blind index key
-enckey = deriveKey(pwd.encode('UTF-8'), b64decode(encsalt.encode('UTF-8')))
-idxkey = deriveKey(pwd.encode('UTF-8'), b64decode(idxsalt.encode('UTF-8')))
+
 
 db = connectToDB('cloudstorage.cwyqmpoiw0xl.us-east-1.rds.amazonaws.com', 'symmetric', 'encryption', 'world')
-cursor = db.cursor(dictionary=True)
-cursor.execute("SELECT code FROM country")
